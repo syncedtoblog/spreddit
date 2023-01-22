@@ -18,7 +18,7 @@ window.Buffer = require('buffer/').Buffer
 //Global parameters
 const DEFAULT_SOROBAN_PATH = 'http://localhost:8000/soroban/rpc'
 const SOROBAN_OPTS = {allowHttp: true}
-const SPREDDIT_CONTRACTID = "b9773ba1c8c2d9ad9369c628a016252f21297491e09c125d790d07b7ce0789e8" 
+const SPREDDIT_CONTRACTID = "780313cae6ded96516b096504de76079608701e2f173e526144bb1944023f902" 
 
 
 
@@ -40,7 +40,7 @@ var strToBytes = (str) => {
     return bytes2
 }
 
-function isValidHttpUrl(string) {
+var isValidHttpUrl = (string) => {
   let url;
   try {
     url = new URL(string);
@@ -50,6 +50,27 @@ function isValidHttpUrl(string) {
   return url.protocol === "http:" || url.protocol === "https:";
 }
 
+var tstampRelativeHumanize = (tstamp) => {
+    //Might be better to use current ledger time if available
+    var now_tsseconds = new Date().getTime() / 1000
+    var diff = now_tsseconds - tstamp
+    if (diff > 0 && diff < 60){
+        return `${Math.floor(diff)} secs ago`
+    }
+    if (diff > 0 && diff/60 < 60){
+        return `${Math.floor(diff/60)} mins ago`
+    }
+    if (diff > 0 && diff/(60*60) < 24){
+        return `${Math.floor(diff/(60*60))} hours ago`
+    }
+    if (diff > 0 && diff/(60*60*24) < 365){
+        return `${Math.floor(diff/(60*60*24))} days ago`
+    }
+    if (diff > 0 && diff/(60*60*24*365)){
+        return `${Math.floor(diff/(60*60*24*365))} years ago`
+    }
+    return null
+}
 
 //function to parse the contract data output data we get from Soroban
 //I think it would make sense to make this more general in the future
@@ -65,8 +86,12 @@ var parse_soroban_output = (obj) => {
         return obj['_value'].map(x => parse_soroban_output(x))
     }
     else if (obj.constructor.name == 'ChildUnion' && 
-             ['u32','i32','u64','i64','u128','i128','bool'].includes( obj._arm ) ) {
+             ['i32','i64','i128','bool'].includes( obj._arm ) ) {
         return obj['_value']
+    }
+    else if (obj.constructor.name == 'ChildUnion' && 
+             ['u32','u64','u128'].includes( obj._arm ) ) {
+        return obj['_value'].low
     }
     else if (obj.constructor.name == 'ChildUnion') {
         return {[obj['_arm']]: parse_soroban_output(obj['_value'])  }
@@ -260,10 +285,12 @@ function App() {
                         x => x[Object.keys(x)[0]]
                       )
                       .map(
-                        x => { return {uri:x[1].uri, count: x[0].count }}
+                        x => Object.fromEntries(
+                                x.map(y => [Object.keys(y)[0] , Object.values(y)[0] ] ))
+                        //x => { return {uri:x[1].uri, count: x[0].count }}
                       )
 
-              console.log(toSet)
+              console.log('toSet:', toSet)
               toSet = toSet.sort((a, b) => b.count - a.count )
               console.log(toSet)
           }
@@ -276,9 +303,6 @@ function App() {
         }, err => {
             console.log(err)
         });
-
-
-
 
     }
 
@@ -394,7 +418,7 @@ function App() {
     //load Spreddit state poller
     useInterval(() => {
             loadSpredditSorobanState()
-    }, 1000*5)
+    }, 1000*3)
 
 
     //handle user Post submission
@@ -407,13 +431,19 @@ function App() {
             setPostLinkError({'error': 'invalid fund amount'})
             return
         }
+
+        var descr = description ? description : ''
         setPostLinkPending(true);  
         setPostLinkError(null); 
         setSpredditSorobanState('vote', 
             [SorobanClient.xdr.ScVal.scvObject(
                 SorobanClient.xdr.ScObject.scoBytes(strToBytes(linkUrl))
              ),
-             SorobanClient.xdr.ScVal.scvI32(Math.floor(linkFunds)) ],
+             SorobanClient.xdr.ScVal.scvI32(Math.floor(linkFunds)),
+             SorobanClient.xdr.ScVal.scvObject(
+                SorobanClient.xdr.ScObject.scoBytes(strToBytes(description))
+             )
+            ],
             () => {
                 setPostLinkPending(false);
                 setPostLinkError(null);
@@ -439,7 +469,11 @@ function App() {
             [SorobanClient.xdr.ScVal.scvObject(
                 SorobanClient.xdr.ScObject.scoBytes(strToBytes(interactUrl))
              ),
-             SorobanClient.xdr.ScVal.scvI32(Math.floor(interactVote)) ],
+             SorobanClient.xdr.ScVal.scvI32(Math.floor(interactVote)), 
+             SorobanClient.xdr.ScVal.scvObject(
+                SorobanClient.xdr.ScObject.scoBytes(strToBytes(description))
+             )
+            ],
             () => {
                 setInteractPending(false);
                 setInteractError(null);
@@ -449,6 +483,8 @@ function App() {
         )
     }
 
+
+    console.log('soroban state to render: ', sorobanState)
 
     return (
           <div className="container">
@@ -562,7 +598,8 @@ function App() {
                                                placeholder="Comment text"
                                                value={description ? description : ''} 
                                                onChange={(e)=>setDescription(
-                                                   e.target.value.length > 0 ? e.target.value : null)}
+                                                   e.target.value.length > 0 ?
+                                                   e.target.value.substring(0, 500) : null)}
                                         />
                                     </div>
 
@@ -766,12 +803,16 @@ function App() {
                                         border: '1px solid #cccccc', padding: '10px', textAlign: 'justify'}}>
                                 <div style={{marginBottom: '10px'}}>
                                     <a href={link.uri} target='_blank'>{link.uri}</a>
+                                    {link.descr && link.descr.length > 0  ?
+                                    <div>
+                                        {link.descr}
+                                    </div> : null }
                                 </div>
                                 <div style={{
                                     display: 'flex', flexDirection: 'row', 
                                     justifyContent: 'space-between', alignItems: 'center'        
                                 }}>
-                                    <div style={{marginRight: '40px', fontSize: '1.2em'}}>
+                                    <div style={{fontSize: '1.2em'}}>
                                         { ' ( ' } 
                                             <span style={{
                                                 color: link.count > 0 ? 'green' : '#B93C3F'
@@ -780,6 +821,10 @@ function App() {
                                             </span>
                                         { ' ) ' } 
                                     </div>
+                                    {tstampRelativeHumanize(link.created) ? 
+                                    <div style={{fontStyle: 'italic'}}>
+                                        {tstampRelativeHumanize(link.created)}
+                                    </div> : null }
                                     <div>
                                         <FaRegThumbsUp style={{
                                             fontSize: '1.2em', marginRight: '20px', 

@@ -1,4 +1,4 @@
-# spreddit
+# Spreddit
 Blockchain-based Reddit clone using Stellar Soroban
 
 

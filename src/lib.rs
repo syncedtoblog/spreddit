@@ -1,11 +1,16 @@
 #![no_std]
+use soroban_auth::{Identifier, Signature};
 use soroban_sdk::{contractimpl, contracttype, symbol, vec, Env, Symbol, Bytes, Vec, Map, log};
+use soroban_sdk::xdr::Asset;
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ArticleData {
     pub uri: Bytes,
     pub count: i32,
+    pub descr: Bytes,
+    pub created: u64,
+    pub updated: u64
 }
 
 #[contracttype]
@@ -26,6 +31,18 @@ const UPVOTE: Symbol = symbol!("UPVOTE");
 const DOWNVOTE: Symbol = symbol!("DOWNVOTE");
 const STATE: Symbol = symbol!("STATE");
 
+/*
+fn transfer(e: &Env, contract_id: &BytesN<32>, to: &Identifier, amount: &i128) {
+    let nonce: i128 = 0;
+    let client = token::Client::new(e, contract_id);
+    client.xfer(&Signature::Invoker, &nonce, to, amount);
+}
+*/
+
+fn get_ledger_timestamp(e: &Env) -> u64 {
+    e.ledger().timestamp()
+}
+
 
 pub struct SpredditContract;
 
@@ -33,8 +50,8 @@ pub struct SpredditContract;
 impl SpredditContract {
 
 
-    pub fn vote(env: Env, uri : Bytes, amount: i32 ) -> State {
-        let mut state = Self::get_state(env.clone());
+    pub fn vote(env: Env, uri : Bytes, amount: i32, descr: Bytes ) -> State {
+        let mut state = Self::refr_state(env.clone());
         
         //nothing to do 
         if amount == 0 {
@@ -49,7 +66,10 @@ impl SpredditContract {
                     uri: uri.clone(), 
                     count: amount.checked_add(
                                state.articles.get_unchecked(uri.clone()).unwrap().count
-                           ).expect("no overflow") 
+                           ).expect("no overflow"), 
+                    descr: state.articles.get_unchecked(uri.clone()).unwrap().descr,
+                    created: state.articles.get_unchecked(uri.clone()).unwrap().created,
+                    updated: get_ledger_timestamp(&env)
                 }
             );
             if amount > 0 {
@@ -58,10 +78,14 @@ impl SpredditContract {
                 env.events().publish((DOWNVOTE,), state.clone());
             }
         } else {
+            let tstamp = get_ledger_timestamp(&env);
             state.articles.set(uri.clone(), 
                 ArticleData { 
                     uri: uri.clone(), 
-                    count: amount
+                    count: amount,
+                    descr: descr.clone(),
+                    created: tstamp,
+                    updated: tstamp
                 }
             );
             env.events().publish((SUBMIT,), state.clone());
@@ -75,23 +99,13 @@ impl SpredditContract {
 
 
     /// Return the current voting state.
-    //fn update_state_counts(state: &State) -> State {
-        //
-    //}
-
-
-
-    /// Return the current voting state.
-    pub fn get_state(env: Env) -> State {
+    pub fn refr_state(env: Env) -> State {
         env.storage()
             .get(STATE)
             .unwrap_or_else(|| Ok(State::default(&env))) // If no value set, assume 0.
             .unwrap() // Panic if the value of COUNTER is not a State.
     }
 }
-
-//soroban invoke     --id b9773ba1c8c2d9ad9369c628a016252f21297491e09c125d790d07b7ce0789e8     --secret-key SCZITBDDWLHWQZGIEYET4E4R4F2RYRCT4ZTSJ7VMVG2L6WJHTP2T7BZR     --rpc-url http://localhost:8000/soroban/rpc     --network-passphrase 'Test SDF Future Network ; October 2022'     --fn vote --arg "[104, 116, 116, 112, 115, 58, 47, 47, 115, 121, 110, 99, 101, 100, 46, 116, 111]" --arg 56
-
 
 
 

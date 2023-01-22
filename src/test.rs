@@ -11,7 +11,7 @@ fn test() {
     let contract_id = env.register_contract(None, SpredditContract);
     let client = SpredditContractClient::new(&env, &contract_id);
 
-    let state = client.get_state();
+    let state = client.refr_state();
     std::println!("State: {:#?}", &state);
 
     let uri = "https://synced.to".as_bytes(); 
@@ -27,7 +27,7 @@ fn test() {
     assert_eq!(client.increment(&1), 1);
     assert_eq!(client.increment(&10), 11);
     assert_eq!(
-        client.get_state(),
+        client.refr_state(),
         State {
             count: 11,
             last_incr: 10
