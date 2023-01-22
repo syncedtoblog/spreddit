@@ -1,5 +1,5 @@
 # Spreddit
-Blockchain-based Reddit clone using Stellar Soroban
+A blockchain-based Reddit clone using Stellar Soroban
 
 
 ## Inspiration
@@ -22,7 +22,10 @@ To run your own Soroban RPC node, use the below Docker command and point the Spr
 To start the spreddit Node server to run the UI, from the project root run
 
     cd spreddit-app
+    npm install
     npm start
+
+and then go to `http://localhost:3000` in your browser
 
 If you want to trial Soroban functions on the futurenet contract, use the below Soroban CLI commands
 
