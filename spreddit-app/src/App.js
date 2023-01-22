@@ -2,23 +2,27 @@ import logo from './logo.png';
 import loading from './loading.svg';
 import './App.css';
 
-//I don't actually use this as it uses unreliable Proxy for CORS
-import { ReactTinyLink } from 'react-tiny-link'
-
 //Icons
 import {FaRegThumbsDown, FaRegThumbsUp, FaCommentDots } from "react-icons/fa"
 
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
+//Imports used by Soroban
 var SorobanClient = require('soroban-client');
 console.log(SorobanClient.Networks)
 var xdr = SorobanClient.xdr
 window.Buffer = require('buffer/').Buffer
 
+
+//Global parameters
 const DEFAULT_SOROBAN_PATH = 'http://localhost:8000/soroban/rpc'
 const SOROBAN_OPTS = {allowHttp: true}
 const SPREDDIT_CONTRACTID = "b9773ba1c8c2d9ad9369c628a016252f21297491e09c125d790d07b7ce0789e8" 
+
+
+
+//Global helper functions
 
 //Since we store Soroban strings as Byte arrays, we need to convert between str and byte array
 var bytesToStr = (bytesArr) => {
@@ -35,7 +39,17 @@ var strToBytes = (str) => {
     let bytes2 = new TextEncoder().encode(str);
     return bytes2
 }
-//-----
+
+function isValidHttpUrl(string) {
+  let url;
+  try {
+    url = new URL(string);
+  } catch (_) {
+    return false;
+  }
+  return url.protocol === "http:" || url.protocol === "https:";
+}
+
 
 //function to parse the contract data output data we get from Soroban
 //I think it would make sense to make this more general in the future
@@ -71,6 +85,41 @@ var parse_soroban_output = (obj) => {
 
 }
 //-----
+
+
+
+
+
+
+//Helpful hooks
+
+/* setInterval hook */
+function useInterval(callback, delay) {
+    const savedCallback = useRef();
+
+    // Remember the latest callback.
+    useEffect(() => {
+        savedCallback.current = callback;
+    }, [callback]);
+
+    // Set up the interval.
+    useEffect(() => {
+        function tick() {
+            console.log('running interval tick')
+            savedCallback.current();
+        }
+        if (delay !== null) {
+            let id = setInterval(tick, delay);
+            return () => clearInterval(id);
+        }
+    }, [delay]);
+}
+
+
+//-----
+
+
+
 
 //Helpful React UI components
 var Panel = (props) => (
@@ -123,31 +172,10 @@ var Overlay = (props) => {
     return overlay
 }
 
-
-
-var XLMOptions = (props) => {
-
-    var overlay = (
-        <div style={{position: 'fixed', top: 0, left: 0, right: 0, zIndex: 4000, height: '100vh',
-                     backgroundColor: 'white'}}>
-            <div style={{position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 5000,
-                         backgroundColor: 'white'}}>
-                <div style={{display:'flex', flexDirection: 'column', alignItems: 'stretch',
-                             height: '100%'}}>
-                    <div style={{flex: '1 1 auto'}} >
-                        {props.children}
-                    </div>
-                </div>
-            </div>
-        </div>
-    )
-
-    return overlay
-}
-
-
-
 //-----
+
+
+
 
 
 //App entrypoint
@@ -174,13 +202,18 @@ function App() {
     var [description, setDescription] = useState(null)
     var [postLinkPending, setPostLinkPending] = useState(false)
     var [postLinkError, setPostLinkError] = useState(false)
-    
+   
 
+    //var [commentFunds, setCommentFunds] = useState(null)
+    //var [comment, setComment] = useState(null)
+    var [interactPending, setInteractPending] = useState(false)
+    var [interactError, setInteractError] = useState(false)
+    var [interactUrl, setInteractUrl] = useState(null)
+    var [interactVote, setInteractVote] = useState(null)
 
-    var [commentFunds, setCommentFunds] = useState(null)
-    var [comment, setComment] = useState(null)
+    //Spreddit Soroban state getter and setter functions
 
-
+    //Soroban state getter
     var loadSpredditSorobanState = () => {
 
         var server = new SorobanClient.Server(
@@ -250,6 +283,7 @@ function App() {
     }
 
 
+    //soroban state setter
     var setSpredditSorobanState = (spredditContractFn, spredditContractArgs ,
                                    onSuccess,onError) => {
 
@@ -277,76 +311,143 @@ function App() {
             return
         }
 
-        server.getAccount(sourcePublicKey).then((account)=>{
-            let walletSource = new SorobanClient.Account(account.id, account.sequence)
+        (async function transactionRunner() {
 
             // Fee hardcoded for this example.
-            const fee = 100;
+            const fee = 1000;
             const contract = new SorobanClient.Contract(contractId);
-            const transaction = new SorobanClient.TransactionBuilder(walletSource, 
-                { fee, networkPassphrase: SorobanClient.Networks.FUTURENET })
-                .addOperation(
-                    // An operation to call increment on the contract
-                    contract.call(spredditContractFn,...spredditContractArgs)
-                )
-                .setTimeout(SorobanClient.TimeoutInfinite)
-                .build();
+            const account = await server.getAccount(sourcePublicKey);
+
+            // Need to run a simulateTransaction to get the transaction footprint before running
+            // the actual transaction
+            var prepSimTransaction = () => {
+
+                let walletSource = new SorobanClient.Account(account.id, account.sequence)
+                const transaction = new SorobanClient.TransactionBuilder(walletSource, 
+                    { fee, networkPassphrase: SorobanClient.Networks.FUTURENET })
+                    .addOperation(
+                        // An operation to call increment on the contract
+                        //contract.call(spredditContractFn,...spredditContractArgs)
+                        contract.call(spredditContractFn,...spredditContractArgs)
+                    )
+                    .setTimeout(SorobanClient.TimeoutInfinite)
+                    .build();
+                return transaction
+            }
+           
+            //Build the actual transaction that includes a footprint
+            var prepRealTransaction = (simTransaction) => {
+                
+                let walletSource = new SorobanClient.Account(
+                    account.id,`${parseInt(simTransaction.sequence) - 1}`)
+                const transaction = new SorobanClient.TransactionBuilder(walletSource, 
+                    { fee, networkPassphrase: SorobanClient.Networks.FUTURENET })
+                    .addOperation(
+                        // An operation to call increment on the contract
+                        //contract.call(spredditContractFn,...spredditContractArgs)
+                        SorobanClient.Operation.invokeHostFunction({
+                            function: simTransaction.operations[0].function,
+                            parameters: simTransaction.operations[0].parameters,
+                            footprint: SorobanClient.xdr.LedgerFootprint.fromXDR(
+                                            sim.footprint, 'base64'),
+                        })
+                    )
+                    .setTimeout(SorobanClient.TimeoutInfinite)
+                    .build();
+                return transaction
+            }
+
+            //get the simulated transaction footprint
+            var sim_transaction = prepSimTransaction()
+            let sim = await server.simulateTransaction(sim_transaction)
+
+            //prepare the real transaction with the footprint
+            const transaction = prepRealTransaction(sim_transaction)
             // sign the transaction
             transaction.sign(SorobanClient.Keypair.fromSecret(sourceSecretKey));
-
-            console.log(transaction)
             console.log(transaction.toXDR())
-
-            server.sendTransaction(transaction).then((transactionResult)=>{
+            
+            try {
+                const transactionResult = await server.sendTransaction(transaction);
                 console.log('got a transactionResult')
                 console.log(transactionResult);
                 onSuccess(transactionResult) 
-            }).catch( (err) => {
+            } catch (err) {
                 onError({'error': 'operation failed'})
                 console.error(err);
-            })
-        }).catch( (err) => {
-            onError({'error': 'account could not be retrieved'})
-            console.error(err);
+            }
+        })().then( (value) => console.log(value)  ).catch(e => {
+            console.log(e); 
+            onError({'error':'operation failed'});
         })
 
 
     }
 
+    //-----
 
-    // Similar to componentDidMount and componentDidUpdate:
+    //load Spreddit state on mount
     useEffect(() => {
-        // Update the document title using the browser API
         loadSpredditSorobanState()
     },[sorobanPath]);
 
+    //load Spreddit state poller
+    useInterval(() => {
+            loadSpredditSorobanState()
+    }, 1000*5)
 
 
+    //handle user Post submission
     var onPostLinkSubmit = () => {
+        if (!isValidHttpUrl(linkUrl)){
+            setPostLinkError({'error': 'invalid url'})
+            return
+        }
+        if (!Number.parseFloat(linkFunds) || Number.parseFloat(linkFunds) <= 0){
+            setPostLinkError({'error': 'invalid fund amount'})
+            return
+        }
         setPostLinkPending(true);  
         setPostLinkError(null); 
-
-        
-       
-        /*
-        setSpredditSorobanState('get_state', 
-            [],
-            () => {setPostLinkPending(false); setPostLinkError(null);},
-            (err) => setPostLinkError(err)
-        )*/
-
-        
         setSpredditSorobanState('vote', 
             [SorobanClient.xdr.ScVal.scvObject(
                 SorobanClient.xdr.ScObject.scoBytes(strToBytes(linkUrl))
              ),
              SorobanClient.xdr.ScVal.scvI32(Math.floor(linkFunds)) ],
-            () => {setPostLinkPending(false); setPostLinkError(null);},
+            () => {
+                setPostLinkPending(false);
+                setPostLinkError(null);
+                setShowPostOverlay(false); 
+            },
             (err) => setPostLinkError(err)
         )
-
     }
 
+    //handle user Post submission
+    var onVoteSubmit = () => {
+        if (!isValidHttpUrl(interactUrl)){
+            setPostLinkError({'error': 'invalid url'})
+            return
+        }
+        if (![-1000,-100,-10,10,100,1000].includes(interactVote)){
+            setPostLinkError({'error': 'invalid vote amount'})
+            return
+        }
+        setInteractPending(true);  
+        setInteractError(null); 
+        setSpredditSorobanState('vote', 
+            [SorobanClient.xdr.ScVal.scvObject(
+                SorobanClient.xdr.ScObject.scoBytes(strToBytes(interactUrl))
+             ),
+             SorobanClient.xdr.ScVal.scvI32(Math.floor(interactVote)) ],
+            () => {
+                setInteractPending(false);
+                setInteractError(null);
+                setShowInteractOverlay(false); 
+            },
+            (err) => setInteractError(err)
+        )
+    }
 
 
     return (
@@ -391,8 +492,7 @@ function App() {
                                             onClick={()=> {
                                                 setSorobanPath(sorobanPathInput);
                                                 setShowRPCPathOverlay(false);  
-                                            }}
-                                        >
+                                            }} >
                                             Set
                                         </button>
                                     </div>
@@ -433,7 +533,9 @@ function App() {
                                     <div style={{textAlign: 'left'}}>
                                         <label style={{fontWeight: 'normal'}}>
                                             Link URL 
-                                            <span style={{color: '#ab4543'}}>{' (required)'}</span>
+                                            {isValidHttpUrl(linkUrl) ? null :
+                                                <span style={{color: '#ab4543'}}>{' (required)'}</span>
+                                            }
                                         </label>
                                         <input style={{width: '100%', marginBottom: '5px'}} 
                                                type="text" placeholder="Valid URL"
@@ -444,7 +546,7 @@ function App() {
 
                                         <label style={{fontWeight: 'normal'}}>
                                            Seed funds
-                                            <span style={{color: '#ab4543'}}>{' (required, must be in wallet)'}</span>
+                                           <span style={{color: '#ab4543'}}>{' (required, must be in wallet)'}</span>
                                         </label>
                                         <input style={{width: '100%', marginBottom: '5px'}} 
                                                type="number" placeholder="XLM upvotes to seed link"
@@ -452,7 +554,6 @@ function App() {
                                                onChange={(e)=>setLinkFunds(
                                                    e.target.value.length > 0 ? e.target.value : null)}
                                         />
-
 
                                         <label style={{fontWeight: 'normal'}}>
                                             Add description
@@ -466,10 +567,8 @@ function App() {
                                     </div>
 
 
-                                    <div style={{display: 'flex', 
-                                                 flexDirection: 'row',
-                                                 alignItems: 'center',
-                                    }}>
+                                    <div style={{display: 'flex', flexDirection: 'row',
+                                                 alignItems: 'center'}}>
                                         <button type="submit" className="button-lg"
                                             style={{width:'100%'}}
                                             onClick={()=> setShowPostOverlay(false) } >
@@ -480,8 +579,7 @@ function App() {
                                             style={{width:'100%'}}
                                             onClick={()=> {
                                                 onPostLinkSubmit();
-                                            }}
-                                        >
+                                            }}>
                                             Submit
                                         </button>
                                     </div>
@@ -491,6 +589,112 @@ function App() {
                     </Overlay> : null}
 
 
+
+                    {showInteractOverlay ?
+                    <Overlay>
+                        <Panel style={{height: '100%'}}>
+                            <Section style={{marginBottom: '10px'}}>
+
+                                {interactPending ? 
+                                <div style={{textAlign: 'center', marginTop: '80px'}}>
+                                    <img src={loading} style={{maxWidth: '150px'}} />
+                                    {interactError ?
+                                        <div style={{margin: '30px'}}>
+                                            <p>{interactError.error}</p>
+                                            <button type="submit" className="button-lg"
+                                                style={{width:'100%'}}
+                                                onClick={()=> { 
+                                                    setInteractPending(false);
+                                                    setInteractError(null);
+                                                    setShowInteractOverlay(false); 
+                                                }} >
+                                                OK
+                                            </button>
+                                        </div>
+                                    : null}
+                                </div>
+                                :
+                                <div style={{textAlign: 'center', marginTop: '80px'}}>
+                                    
+                                    <h5>Vote for link</h5>
+
+                                    <h6 style={{fontWeight: 'bold'}}>{interactUrl}</h6>
+
+
+                                    <div style={{display: 'flex', flexDirection: 'column',
+                                                 alignItems: 'center'}}>
+                                        <button type="submit" className="button-lg"
+                                            style={{width:'100%', color:'green',
+                                                    backgroundColor: interactVote == 1000 ? 
+                                                            '#84b4e0' : 'transparent'
+                                            }}
+                                            onClick={()=> setInteractVote(1000) } >
+                                            {'1000'} 
+                                        </button>
+                                        <button type="submit" className="button-lg"
+                                            style={{width:'100%', color:'green',
+                                                    backgroundColor: interactVote == 100 ? 
+                                                            '#84b4e0' : 'transparent'
+                                            }}
+                                            onClick={()=> setInteractVote(100) } >
+                                            {'100'} 
+                                        </button>
+                                        <button type="submit" className="button-lg"
+                                            style={{width:'100%', color:'green',
+                                                    backgroundColor: interactVote == 10 ? 
+                                                            '#84b4e0' : 'transparent'
+                                            }}
+                                            onClick={()=> setInteractVote(10) } >
+                                            {'10'} 
+                                        </button>
+                                        <button type="submit" className="button-lg"
+                                            style={{width:'100%', color:'#B93C3F',
+                                                    backgroundColor: interactVote == -10 ? 
+                                                            '#84b4e0' : 'transparent'
+                                            }}
+                                            onClick={()=> setInteractVote(-10) } >
+                                            {'- 10'} 
+                                        </button>
+                                        <button type="submit" className="button-lg"
+                                            style={{width:'100%', color:'#B93C3F',
+                                                    backgroundColor: interactVote == -100 ? 
+                                                            '#84b4e0' : 'transparent'
+                                            }}
+                                            onClick={()=> setInteractVote(-100) } >
+                                            {'- 100'} 
+                                        </button>
+                                        <button type="submit" className="button-lg"
+                                            style={{width:'100%', color:'#B93C3F',
+                                                    backgroundColor: interactVote == -1000 ? 
+                                                            '#84b4e0' : 'transparent'
+                                            }}
+                                            onClick={()=> setInteractVote(-1000) } >
+                                            {'- 1000'} 
+                                        </button>
+                                    </div>
+
+                                    <div style={{display: 'flex', flexDirection: 'row',
+                                                 alignItems: 'center'}}>
+                                        <button type="submit" className="button-lg"
+                                            style={{width:'100%'}}
+                                            onClick={()=> setShowInteractOverlay(false) } >
+                                            Cancel
+                                        </button>
+                                        <div style={{width: '5px'}}></div>
+                                        <button type="submit" className="button-lg" 
+                                            style={{width:'100%'}}
+                                            onClick={()=> {
+                                                onVoteSubmit();
+                                            }}
+                                        >
+                                            Submit
+                                        </button>
+                                    </div>
+                                </div>
+                                }
+                            </Section>
+                        </Panel>
+                    </Overlay> : null}
 
 
                     <Section style={{textAlign: 'center'}}>
@@ -543,7 +747,8 @@ function App() {
                            </a>
                         </div>
                     </Section>
-                    
+        
+
                     <Section style={{textAlign: 'center'}}>
                         <button type="submit" className="button-lg" 
                             onClick={(e) => {e.preventDefault(); setShowPostOverlay(true); }}
@@ -552,19 +757,13 @@ function App() {
                         </button>
                     </Section>
 
+
                     {sorobanState != null && sorobanState.articles.length > 0 ? 
                     <Section style={{textAlign: 'center'}}>
                         {sorobanState.articles.map( link =>
                             <div key={link.uri} 
                                 style={{marginBottom: '20px',
                                         border: '1px solid #cccccc', padding: '10px', textAlign: 'justify'}}>
-                                {0 == 1 ? 
-                                <div style={{marginBottom: '5px'}}>
-                                    <ReactTinyLink
-                                    cardSize="small" showGraphic={true}
-                                    maxLine={2} minLine={1} url={link.uri}
-                                    /> 
-                                </div> : null}
                                 <div style={{marginBottom: '10px'}}>
                                     <a href={link.uri} target='_blank'>{link.uri}</a>
                                 </div>
@@ -583,16 +782,37 @@ function App() {
                                     </div>
                                     <div>
                                         <FaRegThumbsUp style={{
-                                            fontSize: '1.2em', marginRight: '20px', color:'green'}} /> 
+                                            fontSize: '1.2em', marginRight: '20px', 
+                                            color:'green', cursor: 'pointer'}} 
+                                            onClick={()=>{
+                                                setInteractUrl(link.uri)
+                                                setInteractVote(100)
+                                                setShowInteractOverlay(true);
+                                            }}
+                                        /> 
                                         <FaRegThumbsDown style={{ 
-                                            fontSize: '1.2em', marginRight: '20px', color:'#B93C3F'}} /> 
+                                            fontSize: '1.2em',
+                                            color:'#B93C3F', cursor: 'pointer'}} 
+                                            onClick={()=>{
+                                                setInteractUrl(link.uri)
+                                                setInteractVote(-100)
+                                                setShowInteractOverlay(true);
+                                            }}
+                                        />
+                                        {0 == 1 ?
                                         <FaCommentDots style={{
-                                            fontSize: '1.2em', color:'#333333'}} /> 
+                                            fontSize: '1.2em', color:'#333333',
+                                            pointer: 'cursor'}} 
+                                            onClick={()=>{
+                                                setShowInteractOverlay(true);
+                                            }}
+                                        /> : null}
                                     </div>
                                 </div>
                             </div>
                         )}
                     </Section> : null }
+
 
                 </Panel>
 
