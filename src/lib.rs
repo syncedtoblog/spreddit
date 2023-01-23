@@ -51,15 +51,18 @@ impl SpredditContract {
         }
        
         //I need to add the vote to the list.
-        //What happens if it's too low?
+        
+        //Uri has already been submitted
         if state.articles.contains_key(uri.clone()) {
 
+            //if new count is less than or equal to zero
+            //remove from state
             if amount.checked_add(
                     state.articles.get_unchecked(uri.clone()).unwrap().count
                 ).expect("no overflow") <= 0 {
                 state.articles.remove(uri.clone());
-            }
-            else {
+            //else update state
+            } else {
                 state.articles.set(uri.clone(), 
                     ArticleData { 
                         uri: uri.clone(), 
@@ -79,7 +82,7 @@ impl SpredditContract {
                 env.events().publish((DOWNVOTE,),(uri.clone(),amount,state.clone()));
             }
 
-
+        //New submission
         } else if amount > 0 {
             let tstamp = get_ledger_timestamp(&env);
             state.articles.set(uri.clone(), 
