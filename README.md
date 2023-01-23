@@ -32,9 +32,9 @@ and then go to `http://localhost:3000` in your browser
 
 If you want to trial Soroban functions on the futurenet contract, use the below Soroban CLI commands
 
-    soroban invoke     --id  780313cae6ded96516b096504de76079608701e2f173e526144bb1944023f902    --secret-key <Futurenet secret key> --rpc-url http://localhost:8000/soroban/rpc     --network-passphrase 'Test SDF Future Network ; October 2022'     --fn vote --arg "[104, 116, 116, 112, 115, 58, 47, 47, 115, 121, 110, 99, 101, 100, 46, 116, 111]" --arg 56 --arg "[]"
+    soroban invoke     --id 3d86cd584daedcf04c37ea5546a6689637b1fd75bd8bd3f89cbc61bbd37d9302    --secret-key <Futurenet secret key> --rpc-url http://localhost:8000/soroban/rpc     --network-passphrase 'Test SDF Future Network ; October 2022'     --fn vote --arg "[104, 116, 116, 112, 115, 58, 47, 47, 115, 121, 110, 99, 101, 100, 46, 116, 111]" --arg 56 --arg "[]"
 
-    soroban invoke     --id 780313cae6ded96516b096504de76079608701e2f173e526144bb1944023f902     --secret-key <Futurenet secret key>     --rpc-url http://localhost:8000/soroban/rpc     --network-passphrase 'Test SDF Future Network ; October 2022'     --fn refr_state
+    soroban invoke     --id 3d86cd584daedcf04c37ea5546a6689637b1fd75bd8bd3f89cbc61bbd37d9302     --secret-key <Futurenet secret key>     --rpc-url http://localhost:8000/soroban/rpc     --network-passphrase 'Test SDF Future Network ; October 2022'     --fn refr_state
 
 
 ## Challenges we ran into
@@ -45,7 +45,7 @@ I couldn't find any docs on parsing the contract data ledger entry in JS, I susp
 
 Related to the above, was figuring out how to add a footprint to the JS calls. I wouldn't have figured this out without the help of the [Soroban Pixelwar dev](https://github.com/candela-network/soroban-pixelwar) - many thanks!
 
-It would be great to have a way for a smart contract to be executed periodically, either by itself or by another looper smart contract. At the moment refreshing Spreddit vote state would need to be done off-chain e.g. by a cron job invoking the contract function.  
+It would be great to have a way for a smart contract to be executed periodically, either by itself or by another looper smart contract. At the moment refreshing Spreddit vote state would need to be done off-chain e.g. by a cron job invoking the contract function. For Spreddit, this would be great for a decay function that decays the vote counts over time.  
 
 Info on floats would be nice (though I understand using floats on blockchain might be a challenge). I saw in the example dapp they use bigNumber to encode. But not sure how it works on the smart contract side. I'd like to write up an example on how to do this in the future actually.
 

@@ -53,23 +53,34 @@ impl SpredditContract {
         //I need to add the vote to the list.
         //What happens if it's too low?
         if state.articles.contains_key(uri.clone()) {
-            state.articles.set(uri.clone(), 
-                ArticleData { 
-                    uri: uri.clone(), 
-                    count: amount.checked_add(
-                               state.articles.get_unchecked(uri.clone()).unwrap().count
-                           ).expect("no overflow"), 
-                    descr: state.articles.get_unchecked(uri.clone()).unwrap().descr,
-                    created: state.articles.get_unchecked(uri.clone()).unwrap().created,
-                    updated: get_ledger_timestamp(&env)
-                }
-            );
-            if amount > 0 {
-                env.events().publish((UPVOTE,), state.clone());
-            } else {
-                env.events().publish((DOWNVOTE,), state.clone());
+
+            if amount.checked_add(
+                    state.articles.get_unchecked(uri.clone()).unwrap().count
+                ).expect("no overflow") <= 0 {
+                state.articles.remove(uri.clone());
             }
-        } else {
+            else {
+                state.articles.set(uri.clone(), 
+                    ArticleData { 
+                        uri: uri.clone(), 
+                        count: amount.checked_add(
+                                   state.articles.get_unchecked(uri.clone()).unwrap().count
+                               ).expect("no overflow"), 
+                        descr: state.articles.get_unchecked(uri.clone()).unwrap().descr,
+                        created: state.articles.get_unchecked(uri.clone()).unwrap().created,
+                        updated: get_ledger_timestamp(&env)
+                    }
+                );
+            }
+
+            if amount > 0 {
+                env.events().publish((UPVOTE,), (uri.clone(),amount,state.clone()));
+            } else {
+                env.events().publish((DOWNVOTE,),(uri.clone(),amount,state.clone()));
+            }
+
+
+        } else if amount > 0 {
             let tstamp = get_ledger_timestamp(&env);
             state.articles.set(uri.clone(), 
                 ArticleData { 

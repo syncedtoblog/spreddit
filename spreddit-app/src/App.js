@@ -18,7 +18,7 @@ window.Buffer = require('buffer/').Buffer
 //Global parameters
 const DEFAULT_SOROBAN_PATH = 'http://localhost:8000/soroban/rpc'
 const SOROBAN_OPTS = {allowHttp: true}
-const SPREDDIT_CONTRACTID = "780313cae6ded96516b096504de76079608701e2f173e526144bb1944023f902" 
+const SPREDDIT_CONTRACTID = "3d86cd584daedcf04c37ea5546a6689637b1fd75bd8bd3f89cbc61bbd37d9302" 
 
 
 
@@ -548,7 +548,7 @@ function App() {
                                     <img src={loading} style={{maxWidth: '150px'}} />
                                     {postLinkError ?
                                         <div style={{margin: '30px'}}>
-                                            <p>{postLinkError.error}</p>
+                                            <p style={{color:'#B93C3F'}}>{postLinkError.error}</p>
                                             <button type="submit" className="button-lg"
                                                 style={{width:'100%'}}
                                                 onClick={()=> { 
@@ -620,6 +620,12 @@ function App() {
                                             Submit
                                         </button>
                                     </div>
+                                    
+                                    {postLinkError ?
+                                        <div style={{marginBottom: '30px', marginTop: '5px'}}>
+                                            <p style={{color:'#B93C3F'}}>{postLinkError.error}</p>
+                                        </div>
+                                    : null}
                                 </div>}
                             </Section>
                         </Panel>
@@ -637,7 +643,7 @@ function App() {
                                     <img src={loading} style={{maxWidth: '150px'}} />
                                     {interactError ?
                                         <div style={{margin: '30px'}}>
-                                            <p>{interactError.error}</p>
+                                            <p style={{color:'#B93C3F'}}>{interactError.error}</p>
                                             <button type="submit" className="button-lg"
                                                 style={{width:'100%'}}
                                                 onClick={()=> { 
