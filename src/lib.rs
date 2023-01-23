@@ -76,10 +76,11 @@ impl SpredditContract {
                 );
             }
 
+            //create event for any subscribers
             if amount > 0 {
-                env.events().publish((UPVOTE,), (uri.clone(),amount,state.clone()));
+                env.events().publish((UPVOTE,), (uri.clone(),amount,state.clone()) );
             } else {
-                env.events().publish((DOWNVOTE,),(uri.clone(),amount,state.clone()));
+                env.events().publish((DOWNVOTE,), (uri.clone(),amount,state.clone()) );
             }
 
         //New submission
@@ -94,7 +95,8 @@ impl SpredditContract {
                     updated: tstamp
                 }
             );
-            env.events().publish((SUBMIT,), state.clone());
+            //create event for any subscribers
+            env.events().publish((SUBMIT,), (uri.clone(),amount,state.clone()) );
         }
 
         // Save the data.
