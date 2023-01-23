@@ -55,7 +55,7 @@ impl SpredditContract {
         //Uri has already been submitted
         if state.articles.contains_key(uri.clone()) {
 
-            //if new count is less than or equal to zero
+            //if new vote count is less than or equal to zero
             //remove from state
             if amount.checked_add(
                     state.articles.get_unchecked(uri.clone()).unwrap().count
