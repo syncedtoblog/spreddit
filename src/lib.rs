@@ -1,7 +1,6 @@
 #![no_std]
 use soroban_auth::{Identifier, Signature};
 use soroban_sdk::{contractimpl, contracttype, symbol, vec, Env, Symbol, Bytes, Vec, Map, log};
-use soroban_sdk::xdr::Asset;
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -31,13 +30,6 @@ const UPVOTE: Symbol = symbol!("UPVOTE");
 const DOWNVOTE: Symbol = symbol!("DOWNVOTE");
 const STATE: Symbol = symbol!("STATE");
 
-/*
-fn transfer(e: &Env, contract_id: &BytesN<32>, to: &Identifier, amount: &i128) {
-    let nonce: i128 = 0;
-    let client = token::Client::new(e, contract_id);
-    client.xfer(&Signature::Invoker, &nonce, to, amount);
-}
-*/
 
 fn get_ledger_timestamp(e: &Env) -> u64 {
     e.ledger().timestamp()
@@ -98,7 +90,7 @@ impl SpredditContract {
     }
 
 
-    /// Return the current voting state.
+    // Return the current voting state.
     pub fn refr_state(env: Env) -> State {
         env.storage()
             .get(STATE)
